@@ -20,7 +20,7 @@ const LandingInput = ({ onClick }) => (
 );
 
 // --- REGISTRATION MODAL ---
-const RegistrationModal = ({ onClose, onSuccess }) => {
+const RegistrationModal = ({ onClose }) => {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [email, setEmail] = useState('');
@@ -33,11 +33,9 @@ const RegistrationModal = ({ onClose, onSuccess }) => {
         businessPhone: '',
         logo: null, // base64 preview
         signature: null, // base64 preview
-        logoFile: null, // raw file
-        signatureFile: null // raw file
     });
 
-    // Step 1: Auth (Magic Link)
+    // Auth (Magic Link)
     const handleAuth = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -56,57 +54,23 @@ const RegistrationModal = ({ onClose, onSuccess }) => {
         }
     };
 
-    // Step 2 & 3: Profile Data Handling
+    // Helper: File Upload
     const handleFileUpload = (e, field) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
             reader.onloadend = () => {
-                setProfile(prev => ({
-                    ...prev,
-                    [field]: reader.result,
-                    [`${field}File`]: file
-                }));
+                setProfile(prev => ({ ...prev, [field]: reader.result }));
             };
             reader.readAsDataURL(file);
         }
-    };
-
-    // NOTE: In a real "Magic Link" flow, the user clicks the link in email and opens a NEW tab. 
-    // This modal typically can't "wait" for that in the same session easily without polling.
-    // However, the User Request implies a linear flow: "Step 1... Step 2... Step 3". 
-    // If they use Google/Social, it redirects. If OTP, it waits.
-    // For this implementation, we will assume the user MUST verify email to *finish* the account creation in Supabase,
-    // OR we can collect the data `localStorage` first (as requested originally) and sync later.
-    // Given the strict Supabase requirement, we'll do this:
-    // 1. User enters Email. We send OTP.
-    // 2. We show "Check your email".
-    // 3. User clicks link -> Redirects back to App -> App detects Session -> Shows "Complete Setup" (the SetupOverlay).
-    // This is the technical reality of Magic Links.
-    // BUT, to satisfy the UX request of a "Multi-step modal" *right now*, maybe we collect data first?
-    // Let's stick to the "SetupOverlay" pattern handling Steps 2 & 3 *after* login. 
-    // So this modal effectively becomes just the "Sign Up / Login" step visually formatted as Step 1.
-    // OR, we can try to facilitate it.
-
-    // User Request: "When 'Sign up' is clicked... Step 1... Step 2... Step 3... Storage: Save all this data into localStorage".
-    // AHA! The user *did* ask to save to localStorage. This bridges the gap!
-    // We collect data -> Save to LS -> Auth -> Redirect -> App reads LS -> Uploads to Supabase.
-    // This matches the "Automatic SIGNET Integration" flow perfectly.
-
-    const handleNext = () => {
-        if (step === 2 && profile.businessName) setStep(3);
-        else if (step === 3) handleSaveAndAuth();
     };
 
     const handleSaveAndAuth = () => {
         // Save to LocalStorage for post-auth sync
         localStorage.setItem('temp_registration_profile', JSON.stringify({
             ...profile,
-            logo: profile.logo, // base64 is fine for LS temp
-            signature: profile.signature
         }));
-
-        // NOW do Auth
         setStep(4); // "Enter Email" step
     };
 
@@ -299,24 +263,26 @@ const LoginModal = ({ onClose }) => {
     );
 };
 
-const LandingPage = () => {
+const LoginPage = () => {
     const [showLogin, setShowLogin] = useState(false);
     const [showRegister, setShowRegister] = useState(false);
 
-    // Check for existing session on mount (just in case App didn't catch it yet, though App handles it)
+    // Check for existing session
     const navigate = useNavigate();
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) navigate('/');
+        });
+    }, []);
 
     return (
         <div className="min-h-screen bg-[#FBFBF9] font-sans text-slate-900 flex flex-col relative overflow-hidden" dir="rtl">
-            {/* Background Decor (Minimal) */}
+            {/* Background Decor */}
             <div className="absolute top-0 right-0 w-full h-[50vh] bg-gradient-to-b from-white to-transparent opacity-50 pointer-events-none" />
 
             {/* HEADER */}
             <header className="w-full p-6 flex justify-between items-center z-10 relative">
-                {/* Logo */}
                 <div className="text-2xl font-bold text-slate-800 tracking-tighter cursor-default select-none">Busni</div>
-
-                {/* Nav */}
                 <div className="flex items-center gap-4">
                     <button
                         onClick={() => setShowLogin(true)}
@@ -346,7 +312,6 @@ const LandingPage = () => {
                 </p>
             </main>
 
-            {/* FOOTER */}
             <footer className="py-6 text-center text-slate-300 text-xs font-mono uppercase tracking-widest">
                 Protected by Busni Security
             </footer>
@@ -358,4 +323,4 @@ const LandingPage = () => {
     );
 };
 
-export default LandingPage;
+export default LoginPage;
